@@ -7,6 +7,7 @@ type Bindings = {
 type LeadPayload = {
   client_id: string
   customer_name: string
+  customer_email: string
   customer_phone: string
   zip_code: string
   preferred_window: string
@@ -45,6 +46,7 @@ app.post('/api/lead', async (c) => {
   const requiredFields: Array<keyof LeadPayload> = [
     'client_id',
     'customer_name',
+    'customer_email',
     'customer_phone',
     'zip_code',
     'preferred_window'
@@ -56,8 +58,14 @@ app.post('/api/lead', async (c) => {
     }
   }
 
+  const email = String(body.customer_email || '').trim()
+  if (!/^\S+@\S+\.\S+$/.test(email)) {
+    return c.json({ ok: false, error: 'Invalid email format.' }, 400)
+  }
+
   const payload = {
     ...body,
+    customer_email: email,
     source: 'leadhammer-landing-page',
     submitted_at: new Date().toISOString()
   }
@@ -109,9 +117,9 @@ app.get('/', (c) => {
       href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"
     />
   </head>
-  <body class="bg-slate-950 text-slate-100">
+  <body class="bg-slate-950 text-slate-100 antialiased">
     <header class="sticky top-0 z-50 border-b border-slate-800/80 bg-slate-950/90 backdrop-blur">
-      <div class="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
+      <div class="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <a href="#" class="flex items-center gap-2 text-xl font-bold tracking-tight">
           <span class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-sm">LH</span>
           LeadHammer
@@ -128,27 +136,27 @@ app.get('/', (c) => {
       <section class="relative overflow-hidden border-b border-slate-800">
         <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(37,99,235,0.35),_transparent_45%)]"></div>
         <div class="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,_rgba(245,158,11,0.2),_transparent_40%)]"></div>
-        <div class="relative mx-auto grid w-full max-w-6xl gap-10 px-6 py-20 md:grid-cols-2 md:py-28">
+        <div class="relative mx-auto grid w-full max-w-6xl gap-10 px-4 py-16 sm:px-6 sm:py-20 md:grid-cols-2 md:py-28">
           <div>
             <p class="mb-4 inline-block rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-amber-300">
               30-second speed-to-lead automation
             </p>
-            <h1 class="text-4xl font-extrabold leading-tight text-white md:text-5xl">
+            <h1 class="text-3xl font-extrabold leading-tight text-white sm:text-4xl md:text-5xl">
               Stop Losing Jobs to a Slow Callback.
             </h1>
-            <p class="mt-5 text-lg text-slate-300">
+            <p class="mt-5 text-base text-slate-300 sm:text-lg">
               We automate your speed-to-lead. When a homeowner requests a quote, our system texts
               them in 30 seconds—even while you're on a ladder.
             </p>
-            <div class="mt-8 flex flex-wrap gap-3">
+            <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <a
                 href="#lead-form"
-                class="rounded-md bg-blue-600 px-6 py-3 text-sm font-semibold hover:bg-blue-500"
+                class="w-full rounded-md bg-blue-600 px-6 py-3 text-center text-sm font-semibold hover:bg-blue-500 sm:w-auto"
                 >Start My 14-Day Trial</a
               >
               <a
                 href="#how-it-works"
-                class="rounded-md border border-slate-600 px-6 py-3 text-sm font-semibold text-slate-200 hover:border-slate-400"
+                class="w-full rounded-md border border-slate-600 px-6 py-3 text-center text-sm font-semibold text-slate-200 hover:border-slate-400 sm:w-auto"
                 >See How It Works</a
               >
             </div>
@@ -172,7 +180,7 @@ app.get('/', (c) => {
         </div>
       </section>
 
-      <section class="mx-auto w-full max-w-6xl px-6 py-16">
+      <section class="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
         <div class="grid gap-6 md:grid-cols-2">
           <article class="rounded-2xl border border-red-900/30 bg-slate-900 p-6">
             <h3 class="text-2xl font-bold text-white">The Old Way: The 4-Hour Delay</h3>
@@ -194,7 +202,7 @@ app.get('/', (c) => {
       </section>
 
       <section id="how-it-works" class="border-y border-slate-800 bg-slate-900/50">
-        <div class="mx-auto w-full max-w-6xl px-6 py-16">
+        <div class="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
           <h2 class="text-3xl font-bold text-white">How It Works</h2>
           <div class="mt-8 grid gap-5 md:grid-cols-3">
             <article class="rounded-xl border border-slate-700 bg-slate-900 p-5">
@@ -216,32 +224,37 @@ app.get('/', (c) => {
         </div>
       </section>
 
-      <section id="lead-form" class="mx-auto w-full max-w-4xl px-6 py-16">
+      <section id="lead-form" class="mx-auto w-full max-w-4xl px-4 py-12 sm:px-6 sm:py-16">
         <div class="rounded-2xl border border-slate-700 bg-slate-900 p-6 md:p-8">
-          <h2 class="text-3xl font-bold text-white">Ready to double your booking rate?</h2>
+          <h2 class="text-2xl font-bold text-white sm:text-3xl">Ready to double your booking rate?</h2>
           <p class="mt-2 text-slate-300">Setup takes 10 minutes. No technical skills required.</p>
 
-          <form id="bookingForm" class="mt-8 grid gap-4 md:grid-cols-2">
+          <form id="bookingForm" class="mt-8 grid gap-4 sm:grid-cols-2">
             <input type="hidden" id="client_id" name="client_id" />
 
             <label class="block">
               <span class="mb-1 block text-sm text-slate-300">Your Name</span>
-              <input name="customer_name" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2" />
+              <input name="customer_name" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base" />
+            </label>
+
+            <label class="block">
+              <span class="mb-1 block text-sm text-slate-300">Email Address</span>
+              <input type="email" name="customer_email" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base" />
             </label>
 
             <label class="block">
               <span class="mb-1 block text-sm text-slate-300">Phone Number</span>
-              <input name="customer_phone" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2" />
+              <input name="customer_phone" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base" />
             </label>
 
             <label class="block">
               <span class="mb-1 block text-sm text-slate-300">ZIP Code</span>
-              <input name="zip_code" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2" />
+              <input name="zip_code" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base" />
             </label>
 
             <label class="block">
               <span class="mb-1 block text-sm text-slate-300">Preferred Service Window</span>
-              <select name="preferred_window" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2">
+              <select name="preferred_window" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base">
                 <option value="">Select a window</option>
                 <option>Tuesday Morning</option>
                 <option>Tuesday Afternoon</option>
@@ -254,15 +267,15 @@ app.get('/', (c) => {
 
             <label class="block md:col-span-2">
               <span class="mb-1 block text-sm text-slate-300">Service Type</span>
-              <input name="job_type" placeholder="e.g., Drywall repair" class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2" />
+              <input name="job_type" placeholder="e.g., Drywall repair" class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base" />
             </label>
 
             <label class="block md:col-span-2">
               <span class="mb-1 block text-sm text-slate-300">Job Notes (optional)</span>
-              <textarea name="job_notes" rows="4" class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2"></textarea>
+              <textarea name="job_notes" rows="4" class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base"></textarea>
             </label>
 
-            <button type="submit" class="md:col-span-2 rounded-md bg-amber-500 px-5 py-3 font-semibold text-slate-950 hover:bg-amber-400">
+            <button type="submit" class="sm:col-span-2 rounded-md bg-amber-500 px-5 py-3 font-semibold text-slate-950 hover:bg-amber-400">
               Submit Booking Request
             </button>
           </form>

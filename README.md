@@ -11,7 +11,7 @@
    - 3-step “How It Works” section
    - Final CTA with embedded booking-request form
 2. “Soft-booking” lead form fields:
-   - customer name, phone, ZIP, preferred service window, service type, notes
+   - customer name, email, phone, ZIP, preferred service window, service type, notes
 3. Multi-tenant routing support:
    - `client_id` captured from URL query parameter (fallback: `demo-client`)
 4. Server-side secure relay endpoint:
@@ -36,6 +36,7 @@
   - Required fields:
     - `client_id`
     - `customer_name`
+    - `customer_email`
     - `customer_phone`
     - `zip_code`
     - `preferred_window`
@@ -95,5 +96,5 @@ npx wrangler pages deploy dist --project-name webapp
 
 ## Deployment Status
 - **Platform**: Cloudflare Pages
-- **Status**: ⚙️ Ready for deployment (webhook URL pending)
+- **Status**: ⚙️ Ready for deployment
 - **Last Updated**: 2026-04-10
