@@ -9,7 +9,7 @@ type LeadPayload = {
   customer_name: string
   customer_email: string
   customer_phone: string
-  zip_code: string
+  service_area_zips: string
   preferred_window: string
   job_type?: string
   job_notes?: string
@@ -48,7 +48,7 @@ app.post('/api/lead', async (c) => {
     'customer_name',
     'customer_email',
     'customer_phone',
-    'zip_code',
+    'service_area_zips',
     'preferred_window'
   ]
 
@@ -63,9 +63,21 @@ app.post('/api/lead', async (c) => {
     return c.json({ ok: false, error: 'Invalid email format.' }, 400)
   }
 
+  const zipsRaw = String(body.service_area_zips || '').trim()
+  const zipList = zipsRaw
+    .split(/[,\n]/)
+    .map((zip) => zip.trim())
+    .filter(Boolean)
+
+  if (zipList.length === 0) {
+    return c.json({ ok: false, error: 'Provide at least one Service Area ZIP.' }, 400)
+  }
+
   const payload = {
     ...body,
     customer_email: email,
+    service_area_zips: zipsRaw,
+    service_area_zip_list: zipList,
     source: 'leadhammer-landing-page',
     submitted_at: new Date().toISOString()
   }
@@ -247,9 +259,16 @@ app.get('/', (c) => {
               <input name="customer_phone" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base" />
             </label>
 
-            <label class="block">
-              <span class="mb-1 block text-sm text-slate-300">ZIP Code</span>
-              <input name="zip_code" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base" />
+            <label class="block sm:col-span-2">
+              <span class="mb-1 block text-sm text-slate-300">Service Area ZIPs</span>
+              <textarea
+                name="service_area_zips"
+                required
+                rows="3"
+                placeholder="e.g., 11211, 11222, 11249"
+                class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base"
+              ></textarea>
+              <span class="mt-1 block text-xs text-slate-400">Add one or multiple ZIP codes separated by commas or new lines.</span>
             </label>
 
             <label class="block">
