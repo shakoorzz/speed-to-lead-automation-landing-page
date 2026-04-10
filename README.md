@@ -11,7 +11,7 @@
    - 3-step “How It Works” section
    - Final CTA with embedded booking-request form
 2. “Soft-booking” lead form fields:
-   - customer name, email, phone, service area ZIPs, preferred service window, service type, notes
+   - customer name, email, phone, service area ZIPs, standard availability (multi-select), service type, notes
 3. Multi-tenant routing support:
    - `client_id` captured from URL query parameter (fallback: `demo-client`)
 4. Server-side secure relay endpoint:
@@ -39,7 +39,7 @@
     - `customer_email`
     - `customer_phone`
     - `service_area_zips`
-    - `preferred_window`
+    - `standard_availability` (array of strings: `morning_8_12`, `afternoon_1_5`, `evening_5_8`)
   - Optional fields:
     - `job_type`
     - `job_notes`

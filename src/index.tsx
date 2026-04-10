@@ -10,7 +10,7 @@ type LeadPayload = {
   customer_email: string
   customer_phone: string
   service_area_zips: string
-  preferred_window: string
+  standard_availability: string[]
   job_type?: string
   job_notes?: string
 }
@@ -48,8 +48,7 @@ app.post('/api/lead', async (c) => {
     'customer_name',
     'customer_email',
     'customer_phone',
-    'service_area_zips',
-    'preferred_window'
+    'service_area_zips'
   ]
 
   for (const field of requiredFields) {
@@ -73,11 +72,28 @@ app.post('/api/lead', async (c) => {
     return c.json({ ok: false, error: 'Provide at least one Service Area ZIP.' }, 400)
   }
 
+  const standardAvailabilityRaw = body.standard_availability
+  const standardAvailability = Array.isArray(standardAvailabilityRaw)
+    ? standardAvailabilityRaw.map((value) => String(value).trim()).filter(Boolean)
+    : typeof standardAvailabilityRaw === 'string' && standardAvailabilityRaw.trim().length > 0
+      ? [standardAvailabilityRaw.trim()]
+      : []
+
+  if (standardAvailability.length === 0) {
+    return c.json({ ok: false, error: 'Select at least one Standard Availability window.' }, 400)
+  }
+
+  const allowedAvailability = new Set(['morning_8_12', 'afternoon_1_5', 'evening_5_8'])
+  if (standardAvailability.some((value) => !allowedAvailability.has(value))) {
+    return c.json({ ok: false, error: 'Invalid Standard Availability option received.' }, 400)
+  }
+
   const payload = {
     ...body,
     customer_email: email,
     service_area_zips: zipsRaw,
     service_area_zip_list: zipList,
+    standard_availability: standardAvailability,
     source: 'leadhammer-landing-page',
     submitted_at: new Date().toISOString()
   }
@@ -271,25 +287,40 @@ app.get('/', (c) => {
               <span class="mt-1 block text-xs text-slate-400">Add one or multiple ZIP codes separated by commas or new lines.</span>
             </label>
 
-            <label class="block">
-              <span class="mb-1 block text-sm text-slate-300">Preferred Service Window</span>
-              <select name="preferred_window" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base">
-                <option value="">Select a window</option>
-                <option>Tuesday Morning</option>
-                <option>Tuesday Afternoon</option>
-                <option>Wednesday Morning</option>
-                <option>Wednesday Afternoon</option>
-                <option>Thursday Morning</option>
-                <option>Thursday Afternoon</option>
-              </select>
-            </label>
+            <fieldset class="block sm:col-span-2">
+              <legend class="mb-2 block text-sm text-slate-300">Standard Availability</legend>
+              <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                <label class="cursor-pointer">
+                  <input type="checkbox" name="standard_availability" value="morning_8_12" class="peer sr-only" />
+                  <span class="block rounded-md border border-slate-600 bg-slate-950 p-3 transition hover:border-blue-500 peer-checked:border-blue-500 peer-checked:bg-blue-500/10">
+                    <span class="block text-sm font-medium text-slate-100">Morning (8 AM - 12 PM)</span>
+                    <span class="mt-1 block text-xs text-slate-400">Best for early service calls</span>
+                  </span>
+                </label>
+                <label class="cursor-pointer">
+                  <input type="checkbox" name="standard_availability" value="afternoon_1_5" class="peer sr-only" />
+                  <span class="block rounded-md border border-slate-600 bg-slate-950 p-3 transition hover:border-blue-500 peer-checked:border-blue-500 peer-checked:bg-blue-500/10">
+                    <span class="block text-sm font-medium text-slate-100">Afternoon (1 PM - 5 PM)</span>
+                    <span class="mt-1 block text-xs text-slate-400">Most common homeowner preference</span>
+                  </span>
+                </label>
+                <label class="cursor-pointer">
+                  <input type="checkbox" name="standard_availability" value="evening_5_8" class="peer sr-only" />
+                  <span class="block rounded-md border border-slate-600 bg-slate-950 p-3 transition hover:border-blue-500 peer-checked:border-blue-500 peer-checked:bg-blue-500/10">
+                    <span class="block text-sm font-medium text-slate-100">Evening (5 PM - 8 PM)</span>
+                    <span class="mt-1 block text-xs text-slate-400">Optional premium/after-hours window</span>
+                  </span>
+                </label>
+              </div>
+              <span class="mt-2 block text-xs text-slate-400">Select all windows you typically offer. At least one is required.</span>
+            </fieldset>
 
-            <label class="block md:col-span-2">
+            <label class="block sm:col-span-2">
               <span class="mb-1 block text-sm text-slate-300">Service Type</span>
               <input name="job_type" placeholder="e.g., Drywall repair" class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base" />
             </label>
 
-            <label class="block md:col-span-2">
+            <label class="block sm:col-span-2">
               <span class="mb-1 block text-sm text-slate-300">Job Notes (optional)</span>
               <textarea name="job_notes" rows="4" class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base"></textarea>
             </label>
@@ -322,7 +353,18 @@ app.get('/', (c) => {
         formMessage.textContent = 'Submitting...'
 
         const formData = new FormData(form)
+        const standardAvailability = formData
+          .getAll('standard_availability')
+          .map((value) => String(value).trim())
+          .filter(Boolean)
+
+        if (standardAvailability.length === 0) {
+          formMessage.textContent = 'Please select at least one Standard Availability window.'
+          return
+        }
+
         const payload = Object.fromEntries(formData.entries())
+        payload.standard_availability = standardAvailability
 
         try {
           const response = await fetch('/api/lead', {
