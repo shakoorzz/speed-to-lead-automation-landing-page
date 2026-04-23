@@ -5,14 +5,14 @@ type Bindings = {
 }
 
 type LeadPayload = {
-  client_id: string
-  customer_name: string
-  customer_email: string
-  customer_phone: string
-  service_area_zips: string
+  full_name: string
+  email_address: string
+  phone_number: string
+  service_area_zips: string[] | string
   standard_availability: string[]
-  job_type?: string
-  job_notes?: string
+  primary_service_category: string
+  custom_sms_intro: string
+  daily_lead_limit: number | string
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -44,11 +44,14 @@ app.post('/api/lead', async (c) => {
   }
 
   const requiredFields: Array<keyof LeadPayload> = [
-    'client_id',
-    'customer_name',
-    'customer_email',
-    'customer_phone',
-    'service_area_zips'
+    'full_name',
+    'email_address',
+    'phone_number',
+    'service_area_zips',
+    'standard_availability',
+    'primary_service_category',
+    'custom_sms_intro',
+    'daily_lead_limit'
   ]
 
   for (const field of requiredFields) {
@@ -57,19 +60,62 @@ app.post('/api/lead', async (c) => {
     }
   }
 
-  const email = String(body.customer_email || '').trim()
+  const fullName = String(body.full_name || '').trim()
+  if (fullName.length === 0) {
+    return c.json({ ok: false, error: 'Full name is required.' }, 400)
+  }
+
+  const email = String(body.email_address || '').trim()
   if (!/^\S+@\S+\.\S+$/.test(email)) {
     return c.json({ ok: false, error: 'Invalid email format.' }, 400)
   }
 
-  const zipsRaw = String(body.service_area_zips || '').trim()
-  const zipList = zipsRaw
-    .split(/[,\n]/)
-    .map((zip) => zip.trim())
+  const phoneNumber = String(body.phone_number || '').trim()
+  if (phoneNumber.length === 0) {
+    return c.json({ ok: false, error: 'Phone number is required.' }, 400)
+  }
+
+  const zipInputs = Array.isArray(body.service_area_zips)
+    ? body.service_area_zips.map((value) => String(value))
+    : [String(body.service_area_zips || '')]
+
+  const zipList = zipInputs
+    .flatMap((value) => value.split(/[,\n]/))
+    .map((zip) => zip.replace(/\s+/g, ''))
     .filter(Boolean)
 
   if (zipList.length === 0) {
     return c.json({ ok: false, error: 'Provide at least one Service Area ZIP.' }, 400)
+  }
+
+  if (zipList.some((zip) => !/^\d{5}$/.test(zip))) {
+    return c.json({ ok: false, error: 'Please enter valid 5-digit ZIP codes only.' }, 400)
+  }
+
+  const primaryServiceCategory = String(body.primary_service_category || '').trim()
+  const allowedServiceCategories = new Set([
+    'plumbing',
+    'electrical',
+    'drywall_painting',
+    'carpentry',
+    'general_handyman',
+    'hvac',
+    'landscaping',
+    'other'
+  ])
+
+  if (!allowedServiceCategories.has(primaryServiceCategory)) {
+    return c.json({ ok: false, error: 'Please select your primary service category to configure the automation.' }, 400)
+  }
+
+  const customSmsIntro = String(body.custom_sms_intro || '').trim()
+  if (customSmsIntro.length < 20) {
+    return c.json({ ok: false, error: 'Custom SMS Intro must be at least 20 characters.' }, 400)
+  }
+
+  const dailyLeadLimit = Number.parseInt(String(body.daily_lead_limit || ''), 10)
+  if (Number.isNaN(dailyLeadLimit) || dailyLeadLimit < 1 || dailyLeadLimit > 50) {
+    return c.json({ ok: false, error: 'Daily Lead Limit must be a number between 1 and 50.' }, 400)
   }
 
   const standardAvailabilityRaw = body.standard_availability
@@ -89,13 +135,14 @@ app.post('/api/lead', async (c) => {
   }
 
   const payload = {
-    ...body,
-    customer_email: email,
-    service_area_zips: zipsRaw,
-    service_area_zip_list: zipList,
+    full_name: fullName,
+    email_address: email,
+    phone_number: phoneNumber,
+    service_area_zips: zipList,
     standard_availability: standardAvailability,
-    source: 'leadhammer-landing-page',
-    submitted_at: new Date().toISOString()
+    primary_service_category: primaryServiceCategory,
+    custom_sms_intro: customSmsIntro,
+    daily_lead_limit: dailyLeadLimit
   }
 
   try {
@@ -107,7 +154,7 @@ app.post('/api/lead', async (c) => {
 
     const text = await response.text()
 
-    if (!response.ok) {
+    if (response.status !== 200) {
       return c.json(
         {
           ok: false,
@@ -257,34 +304,33 @@ app.get('/', (c) => {
           <h2 class="text-2xl font-bold text-white sm:text-3xl">Ready to double your booking rate?</h2>
           <p class="mt-2 text-slate-300">Setup takes 10 minutes. No technical skills required.</p>
 
-          <form id="bookingForm" class="mt-8 grid gap-4 sm:grid-cols-2">
-            <input type="hidden" id="client_id" name="client_id" />
-
+          <form id="bookingForm" method="post" class="mt-8 grid gap-4 sm:grid-cols-2">
             <label class="block">
-              <span class="mb-1 block text-sm text-slate-300">Your Name</span>
-              <input name="customer_name" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base" />
+              <span class="mb-1 block text-sm text-slate-300">Full Name</span>
+              <input name="full_name" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base" />
             </label>
 
             <label class="block">
               <span class="mb-1 block text-sm text-slate-300">Email Address</span>
-              <input type="email" name="customer_email" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base" />
+              <input type="email" name="email_address" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base" />
             </label>
 
             <label class="block">
               <span class="mb-1 block text-sm text-slate-300">Phone Number</span>
-              <input name="customer_phone" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base" />
+              <input name="phone_number" required class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base" />
             </label>
 
             <label class="block sm:col-span-2">
               <span class="mb-1 block text-sm text-slate-300">Service Area ZIPs</span>
               <textarea
+                id="service_area_zips"
                 name="service_area_zips"
-                required
                 rows="3"
                 placeholder="e.g., 11211, 11222, 11249"
-                class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base"
+                class="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-base text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
               ></textarea>
               <span class="mt-1 block text-xs text-slate-400">Add one or multiple ZIP codes separated by commas or new lines.</span>
+              <span id="serviceAreaZipsError" class="mt-1 block text-xs text-red-400"></span>
             </label>
 
             <fieldset class="block sm:col-span-2">
@@ -316,21 +362,80 @@ app.get('/', (c) => {
             </fieldset>
 
             <label class="block sm:col-span-2">
-              <span class="mb-1 block text-sm text-slate-300">Service Type</span>
-              <input name="job_type" placeholder="e.g., Drywall repair" class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base" />
+              <span class="mb-1 block text-sm text-slate-300">Primary Service Category</span>
+              <div class="relative">
+                <select
+                  id="primary_service_category"
+                  name="primary_service_category"
+                  required
+                  class="w-full appearance-none rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-base text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Please select a category</option>
+                  <option value="plumbing">Plumbing</option>
+                  <option value="electrical">Electrical</option>
+                  <option value="drywall_painting">Drywall & Painting</option>
+                  <option value="carpentry">Carpentry & Framing</option>
+                  <option value="general_handyman">General Handyman Repair</option>
+                  <option value="hvac">HVAC</option>
+                  <option value="landscaping">Landscaping & Exterior</option>
+                  <option value="other">Other / Not Listed</option>
+                </select>
+                <i class="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400"></i>
+              </div>
+              <span id="primaryServiceCategoryError" class="mt-1 block text-xs text-red-400"></span>
             </label>
 
             <label class="block sm:col-span-2">
-              <span class="mb-1 block text-sm text-slate-300">Job Notes (optional)</span>
-              <textarea name="job_notes" rows="4" class="w-full rounded-md border border-slate-600 bg-slate-950 px-3 py-2 text-base"></textarea>
+              <span class="mb-1 block text-sm text-slate-300">Custom SMS Intro</span>
+              <textarea
+                id="custom_sms_intro"
+                name="custom_sms_intro"
+                required
+                rows="4"
+                placeholder="e.g., Hi, I'm [Name] from [Business]! I saw your request for [Service] and would love to help..."
+                class="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-base text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              ></textarea>
+              <span class="mt-1 block text-xs text-slate-400">This is the very first message your leads will receive via SMS. Make it personal and professional.</span>
+              <span id="customSmsIntroError" class="mt-1 block text-xs text-red-400"></span>
             </label>
 
-            <button type="submit" class="sm:col-span-2 rounded-md bg-amber-500 px-5 py-3 font-semibold text-slate-950 hover:bg-amber-400">
-              Submit Booking Request
+            <label class="block sm:col-span-2 md:w-1/2">
+              <span class="mb-1 block text-sm text-slate-300">Daily Lead Limit</span>
+              <input
+                id="daily_lead_limit"
+                type="number"
+                name="daily_lead_limit"
+                required
+                min="1"
+                max="50"
+                value="5"
+                class="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-base text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <span class="mt-1 block text-xs text-slate-400">The maximum number of new leads the AI will process for you per day before pausing.</span>
+              <span id="dailyLeadLimitError" class="mt-1 block text-xs text-red-400"></span>
+            </label>
+
+            <button
+              id="submitButton"
+              type="submit"
+              class="sm:col-span-2 rounded-md bg-amber-500 px-5 py-3 font-semibold text-slate-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              Activate My Automation
             </button>
           </form>
 
-          <p id="formMessage" class="mt-4 text-sm text-slate-300"></p>
+          <div id="successState" class="mt-8 hidden rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-6 text-emerald-100">
+            <div class="flex items-start gap-4">
+              <div class="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/20 text-3xl">✅</div>
+              <div class="space-y-2">
+                <p class="text-xl font-bold">🎉 Success! Your LeadHammer automation is being configured. Check your phone for a test alert.</p>
+                <span class="inline-flex rounded-full border border-emerald-400/40 bg-emerald-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-200">Configuration Verified</span>
+              </div>
+            </div>
+          </div>
+
+          <p id="formMessage" class="mt-4 min-h-5 text-sm text-slate-300" role="status" aria-live="polite"></p>
+          <div id="formToast" class="pointer-events-none fixed right-4 top-4 z-50 hidden rounded-md border px-4 py-3 text-sm shadow-lg backdrop-blur"></div>
         </div>
       </section>
     </main>
@@ -340,31 +445,150 @@ app.get('/', (c) => {
     </footer>
 
     <script>
-      const params = new URLSearchParams(window.location.search)
-      const clientId = params.get('client_id') || 'demo-client'
-      document.getElementById('client_id').value = clientId
       document.getElementById('year').textContent = new Date().getFullYear()
+      if (window.location.search) {
+        window.history.replaceState({}, '', window.location.pathname + window.location.hash)
+      }
 
       const form = document.getElementById('bookingForm')
       const formMessage = document.getElementById('formMessage')
+      const formToast = document.getElementById('formToast')
+      const successState = document.getElementById('successState')
+      const submitButton = document.getElementById('submitButton')
+      let isSubmitted = false
+      const defaultSubmitLabel = submitButton.textContent
+      const serviceAreaZipsError = document.getElementById('serviceAreaZipsError')
+      const primaryServiceCategoryError = document.getElementById('primaryServiceCategoryError')
+      const customSmsIntroError = document.getElementById('customSmsIntroError')
+      const dailyLeadLimitError = document.getElementById('dailyLeadLimitError')
 
-      form.addEventListener('submit', async (event) => {
-        event.preventDefault()
-        formMessage.textContent = 'Submitting...'
+      const showToast = (message, type = 'error') => {
+        formToast.textContent = message
+        formToast.className =
+          'pointer-events-none fixed right-4 top-4 z-50 rounded-md border px-4 py-3 text-sm shadow-lg backdrop-blur ' +
+          (type === 'success'
+            ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100'
+            : 'border-red-500/40 bg-red-500/15 text-red-100')
+        formToast.classList.remove('hidden')
+        window.setTimeout(() => formToast.classList.add('hidden'), 5000)
+      }
+
+      const setFormMessage = (message, type = 'default') => {
+        formMessage.textContent = message
+        formMessage.className =
+          'mt-4 min-h-5 text-sm ' +
+          (type === 'success'
+            ? 'text-emerald-300'
+            : type === 'error'
+              ? 'text-red-300'
+              : 'text-slate-300')
+      }
+
+      const setSubmitting = (isSubmitting) => {
+        submitButton.disabled = isSubmitting
+        submitButton.textContent = isSubmitting ? 'Connecting to n8n...' : defaultSubmitLabel
+      }
+
+      const renderSubmissionState = () => {
+        if (isSubmitted) {
+          form.classList.add('hidden')
+          formMessage.classList.add('hidden')
+          successState.classList.remove('hidden')
+          return
+        }
+
+        form.classList.remove('hidden')
+        formMessage.classList.remove('hidden')
+        successState.classList.add('hidden')
+      }
+
+      const hasValidPayloadShape = (payload) => {
+        return (
+          typeof payload.full_name === 'string' &&
+          typeof payload.email_address === 'string' &&
+          typeof payload.phone_number === 'string' &&
+          Array.isArray(payload.service_area_zips) &&
+          payload.service_area_zips.every((zip) => typeof zip === 'string') &&
+          Array.isArray(payload.standard_availability) &&
+          payload.standard_availability.every((slot) => typeof slot === 'string') &&
+          typeof payload.primary_service_category === 'string' &&
+          typeof payload.custom_sms_intro === 'string' &&
+          typeof payload.daily_lead_limit === 'number'
+        )
+      }
+
+      const handleFormSubmit = async () => {
+        console.log('Submitting to n8n...')
+        setFormMessage('')
 
         const formData = new FormData(form)
+        serviceAreaZipsError.textContent = ''
+        primaryServiceCategoryError.textContent = ''
+        customSmsIntroError.textContent = ''
+        dailyLeadLimitError.textContent = ''
+
+        const serviceAreaZips = String(formData.get('service_area_zips') || '')
+          .split(/[,\\n]/)
+          .map((zip) => zip.replace(/\\s+/g, ''))
+          .filter(Boolean)
+
+        if (serviceAreaZips.length === 0) {
+          serviceAreaZipsError.textContent = 'Please enter at least one 5-digit ZIP code.'
+          return
+        }
+
+        if (serviceAreaZips.some((zip) => !/^\\d{5}$/.test(zip))) {
+          serviceAreaZipsError.textContent = 'Please enter valid 5-digit ZIP codes only.'
+          return
+        }
+
+        const primaryServiceCategory = String(formData.get('primary_service_category') || '').trim()
+        if (!primaryServiceCategory) {
+          primaryServiceCategoryError.textContent = 'Please select your primary service category to configure the automation.'
+          return
+        }
+
+        const customSmsIntro = String(formData.get('custom_sms_intro') || '').trim()
+        if (customSmsIntro.length < 20) {
+          customSmsIntroError.textContent = 'Please enter at least 20 characters for your Custom SMS Intro.'
+          return
+        }
+
+        const dailyLeadLimit = Number.parseInt(String(formData.get('daily_lead_limit') || ''), 10)
+        if (Number.isNaN(dailyLeadLimit) || dailyLeadLimit < 1 || dailyLeadLimit > 50) {
+          dailyLeadLimitError.textContent = 'Please enter a Daily Lead Limit between 1 and 50.'
+          return
+        }
+
         const standardAvailability = formData
           .getAll('standard_availability')
           .map((value) => String(value).trim())
           .filter(Boolean)
 
         if (standardAvailability.length === 0) {
-          formMessage.textContent = 'Please select at least one Standard Availability window.'
+          setFormMessage('Please select at least one Standard Availability window.', 'error')
           return
         }
 
-        const payload = Object.fromEntries(formData.entries())
-        payload.standard_availability = standardAvailability
+        const payload = {
+          full_name: String(formData.get('full_name') || '').trim(),
+          email_address: String(formData.get('email_address') || '').trim(),
+          phone_number: String(formData.get('phone_number') || '').trim(),
+          service_area_zips: serviceAreaZips,
+          standard_availability: standardAvailability,
+          primary_service_category: primaryServiceCategory,
+          custom_sms_intro: customSmsIntro,
+          daily_lead_limit: dailyLeadLimit
+        }
+
+        if (!hasValidPayloadShape(payload)) {
+          setFormMessage('Connection error. Please try again or contact support.', 'error')
+          showToast('Connection error. Please try again or contact support.', 'error')
+          return
+        }
+
+        setSubmitting(true)
+        setFormMessage('Connecting to n8n...')
 
         try {
           const response = await fetch('/api/lead', {
@@ -372,20 +596,40 @@ app.get('/', (c) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
           })
+          console.log('n8n Response Received:', response)
 
-          const data = await response.json()
-
-          if (!response.ok || !data.ok) {
-            throw new Error(data.error || 'Submission failed.')
+          if (!response.ok) {
+            setFormMessage('Connection error. Please try again or contact support.', 'error')
+            showToast('Connection error. Please try again or contact support.', 'error')
+            return
           }
 
-          formMessage.textContent = 'Thanks! Your request was sent. We\'ll text you shortly.'
+          const data = await response.json()
+          if (!data.ok) {
+            setFormMessage('Connection error. Please try again or contact support.', 'error')
+            showToast('Connection error. Please try again or contact support.', 'error')
+            return
+          }
+
+          isSubmitted = true
+          renderSubmissionState()
+          window.history.replaceState({}, document.title, '/')
+          showToast('Automation connected successfully.', 'success')
           form.reset()
-          document.getElementById('client_id').value = clientId
-        } catch (error) {
-          formMessage.textContent = 'Submission failed: ' + (error.message || 'Unknown error')
+        } catch {
+          setFormMessage('Connection error. Please try again or contact support.', 'error')
+          showToast('Connection error. Please try again or contact support.', 'error')
+        } finally {
+          setSubmitting(false)
         }
-      })
+      }
+
+      form.onsubmit = (event) => {
+        event.preventDefault()
+        handleFormSubmit()
+      }
+
+      renderSubmissionState()
     </script>
   </body>
 </html>`)
